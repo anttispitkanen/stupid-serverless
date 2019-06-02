@@ -1,8 +1,11 @@
 const serverless = require('serverless-http');
 const express = require('express');
+const cors = require('cors');
 const wikipediaClient = require('./clients/wikipedia');
 
 const app = express();
+app.use(express.json());
+app.use(cors());
 
 app.get('/random-text', async (req, res) => {
   try {
