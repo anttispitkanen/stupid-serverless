@@ -97,7 +97,8 @@ async function upsertWordWithSynonyms(word, synonyms, wordExists = false) {
 
 async function getSynonymsForText(text) {
   const words = extractWords(text);
-  const wordsWithSynonyms = await createWordsWithSynonyms(words);
+  const uniqueWords = [...new Set(words.map(w => w.toLowerCase()))];
+  const wordsWithSynonyms = await createWordsWithSynonyms(uniqueWords);
   return wordsWithSynonyms;
 }
 
