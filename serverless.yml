@@ -41,3 +41,11 @@ functions:
           method: post
           private: true
           cors: true
+  syllables:
+    handler: index.handler
+    events:
+      - http:
+          path: /syllables
+          method: post
+          private: true
+          cors: true

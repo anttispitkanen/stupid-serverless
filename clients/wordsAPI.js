@@ -4,6 +4,15 @@ const { ignoredWords } = require('../ignoredWords');
 
 const { RAPIDAPI_KEY, RAPIDAPI_HOST } = process.env;
 
+const HEADERS = {
+  'x-RapidAPI-Host': RAPIDAPI_HOST,
+  'x-RapidAPI-Key': RAPIDAPI_KEY,
+};
+
+/**
+ * @param {string} text
+ * @returns {string[]}
+ */
 function extractWords(text) {
   return text
     .split(/\W/)
@@ -15,93 +24,137 @@ function extractWords(text) {
 
 /**
  * Fetch synonyms for each word given
- * @param {Array<string>} wordArray
+ * @param {string[]} wordArray
+ * @param {"synonyms" | "syllables"} whatStuff
  */
-async function createWordsWithSynonyms(wordArray) {
-  const wordsWithSynonyms = [];
+async function createWordsWithStuff(wordArray, whatStuff) {
+  /** @type {wordWithStuff[]} */
+  const wordsWithStuff = [];
+
   await Promise.all(
     wordArray.map(async word => {
-      const wordWithSynonyms = await getSynonymsForWord(word);
-      return wordsWithSynonyms.push(wordWithSynonyms);
+      const wordWithStuff = await getStuffForWord(word, whatStuff);
+      return wordsWithStuff.push(wordWithStuff);
     }),
   );
-  return wordsWithSynonyms;
+
+  return wordsWithStuff;
 }
 
 /**
- * Get synonyms from DB if they exist there.
- * If not, fetch from wordsAPI and insert into DB.
- * @param {string} word
+ * @typedef {Object} wordWithStuff
+ * @property {string} word
+ * @property {string[]} synonyms
+ * @property {string[]} syllables
  */
-async function getSynonymsForWord(word) {
-  try {
-    // Check DB and return from there if word and synonyms exist
-    const maybeWord = await dynamoWrapper.get(word);
-    console.log(maybeWord);
 
-    if (maybeWord && maybeWord.Item && maybeWord.Item.synonyms) {
+/**
+ * Get stuff from DB if it exists there, or from API if not,
+ * and in such case also store in DB.
+ * @param {string} word
+ * @param {"synonyms" | "syllables"} whatStuff
+ * @returns {Promise<wordWithStuff>}
+ */
+async function getStuffForWord(word, whatStuff) {
+  try {
+    // check if word exists in DB
+    const maybeWord = await dynamoWrapper.get(word);
+    console.log({ maybeWord });
+
+    if (maybeWord && maybeWord.Item && maybeWord.Item[whatStuff]) {
+      console.log('FOUND IN DB! :DD with value ' + maybeWord.Item[whatStuff]);
+      // found in DB, just return the stuff
       return {
         word,
-        synonyms: maybeWord.Item.synonyms,
+        [whatStuff]: maybeWord.Item[whatStuff],
       };
     }
 
-    // not in DB, fetch from WordsAPI
-    const synonyms = await fetchSynonymsFromAPI(word);
+    console.log('about to fetch stuff');
+    // not in DB, fetch from API
+    const stuff = await fetchStuffFromAPI(word, whatStuff);
 
-    // also store in DB
-    await upsertWordWithSynonyms(word, synonyms, maybeWord);
+    console.log({ stuff });
+    // store in DB
+    await upsertWordWithStuff(word, whatStuff, stuff, !!maybeWord);
 
     return {
       word,
-      synonyms,
+      [whatStuff]: stuff,
     };
   } catch (err) {
     console.error(err);
     return {
       word,
-      synonyms: [],
+      [whatStuff]: [],
     };
   }
 }
 
-async function fetchSynonymsFromAPI(word) {
+/**
+ * @param {string} word
+ * @param {"synonyms" | "syllables"} whatToFetch
+ * @returns {string[]}
+ */
+async function fetchStuffFromAPI(word, whatToFetch) {
   try {
     const response = await axios.get(
       `https://wordsapiv1.p.rapidapi.com/words/${encodeURIComponent(
         word,
-      )}/synonyms`,
+      )}/${whatToFetch}`,
       {
-        headers: {
-          'x-RapidAPI-Host': RAPIDAPI_HOST,
-          'x-RapidAPI-Key': RAPIDAPI_KEY,
-        },
+        headers: HEADERS,
       },
     );
 
     const { data } = response;
-    const synonyms = data.synonyms;
-    return synonyms;
+
+    switch (whatToFetch) {
+      case 'synonyms':
+        const synonyms = data.synonyms;
+        return synonyms || [];
+      case 'syllables':
+        const syllables = data && data.syllables && data.syllables.list;
+        return syllables || [];
+      default:
+        return [];
+    }
   } catch (err) {
     console.error(`${word} not found`);
     return [];
   }
 }
 
-async function upsertWordWithSynonyms(word, synonyms, wordExists = false) {
+/**
+ * @param {string} word
+ * @param {"synonyms" | "syllables"} whatToUpdate
+ * @param {string[]} data
+ * @param {boolean} wordExists
+ */
+async function upsertWordWithStuff(
+  word,
+  whatToUpdate,
+  data,
+  wordExists = false,
+) {
   if (wordExists) {
-    return dynamoWrapper.updateSynonyms(word, synonyms);
+    return dynamoWrapper.update(word, whatToUpdate, data);
   }
-  return dynamoWrapper.put(word, { synonyms });
+  return dynamoWrapper.put(word, { [whatToUpdate]: data });
 }
 
-async function getSynonymsForText(text) {
+/**
+ * @param {string} text
+ * @param {"synonyms" | "syllables"} whatStuff
+ * @returns {wordWithStuff}
+ */
+async function getStuffForText(text, whatStuff) {
   const words = extractWords(text);
   const uniqueWords = [...new Set(words.map(w => w.toLowerCase()))];
-  const wordsWithSynonyms = await createWordsWithSynonyms(uniqueWords);
+  const wordsWithSynonyms = await createWordsWithStuff(uniqueWords, whatStuff);
   return wordsWithSynonyms;
 }
 
 module.exports = {
-  getSynonymsForText,
+  getStuffForText,
 };

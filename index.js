@@ -30,9 +30,27 @@ app.post('/synonymize', async (req, res) => {
   try {
     const text = req.body && req.body.text;
 
-    const wordsWithSynonyms = await wordsAPIClient.getSynonymsForText(text);
+    const wordsWithSynonyms = await wordsAPIClient.getStuffForText(
+      text,
+      'synonyms',
+    );
 
     res.json(wordsWithSynonyms);
+  } catch (err) {
+    res.status(500).json({ error: err });
+  }
+});
+
+app.post('/syllables', async (req, res) => {
+  try {
+    const text = req.body && req.body.text;
+
+    const wordsWithSyllabless = await wordsAPIClient.getStuffForText(
+      text,
+      'syllables',
+    );
+
+    res.json(wordsWithSyllabless);
   } catch (err) {
     res.status(500).json({ error: err });
   }

@@ -36,7 +36,7 @@ const dynamoWrapper = {
       );
     }),
 
-  updateSynonyms: (word, synonyms) =>
+  update: (word, updateWhat, data) =>
     new Promise((resolve, reject) => {
       dynamoDB.update(
         {
@@ -44,30 +44,9 @@ const dynamoWrapper = {
           Key: {
             word,
           },
-          UpdateExpression: 'set synonyms = :s',
+          UpdateExpression: `set ${updateWhat} = :s`,
           ExpressionAttributeValues: {
-            ':s': synonyms,
-          },
-          ReturnValues: 'UPDATED_OLD',
-        },
-        (err, data) => {
-          if (err) reject(err);
-          resolve(data);
-        },
-      );
-    }),
-
-  updateSyllables: (word, syllables) =>
-    new Promise((resolve, reject) => {
-      dynamoDB.update(
-        {
-          TableName: TABLE_NAME,
-          Key: {
-            word,
-          },
-          UpdateExpression: 'set syllables = :s',
-          ExpressionAttributeValues: {
-            ':s': syllables,
+            ':s': data,
           },
           ReturnValues: 'UPDATED_OLD',
         },
